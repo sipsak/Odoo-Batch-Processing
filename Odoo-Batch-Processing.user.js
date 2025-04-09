@@ -12,7 +12,6 @@
 // @icon            https://raw.githubusercontent.com/sipsak/odoo-image-enlarger/refs/heads/main/icon.png
 // @updateURL       https://raw.githubusercontent.com/sipsak/Odoo-Batch-Processing/main/Odoo-Batch-Processing.user.js
 // @downloadURL     https://raw.githubusercontent.com/sipsak/Odoo-Batch-Processing/main/Odoo-Batch-Processing.user.js
-
 // ==/UserScript==
 
 (function() {
