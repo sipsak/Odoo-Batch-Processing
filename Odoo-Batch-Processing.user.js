@@ -2,7 +2,7 @@
 // @name            Odoo Batch Processing
 // @name:tr         Odoo Toplu Güncelleme
 // @namespace       https://github.com/sipsak
-// @version         1.4
+// @version         1.5
 // @description     It adds a batch update feature for rows in Odoo. To perform a batch update, you need to Ctrl + click on the column header you want to update.
 // @description:tr  Odoo'da satırlarda toplu güncelleme yapma özelliği ekler, toplu güncelleme yapmak istediğiniz sütun başlığına Ctrl ile birlikte tıklamanız gerekir.
 // @author          Burak Şipşak
@@ -72,6 +72,23 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-family: monospace;
+        }
+        .update-info-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #714b67;
+            margin-bottom: 10px;
+        }
+        .update-scope-selector {
+            margin-top: 5px;
+            margin-bottom: 15px;
+        }
+        .update-scope-selector label {
+            margin-right: 15px;
+            font-weight: normal;
+        }
+        .update-scope-selector input[type="radio"] {
+            margin-right: 5px;
         }
     `;
 
@@ -172,13 +189,24 @@
         const existingDialog = document.querySelector('.bulk-update-dialog');
         if (existingDialog) existingDialog.remove();
 
+        // Görünür satır sayısını al
+        const table = document.querySelector('.o_list_table');
+        const allRows = Array.from(table.querySelectorAll('tbody tr.o_data_row'));
+        const visibleRows = allRows.filter(row => row.style.display !== 'none');
+
+        const dialogPrefix = visibleRows.length !== allRows.length ?
+            `<div class="update-info-text">
+                <strong>Bilgi:</strong> Tabloda ${allRows.length} satır var ve sadece görünür olan ${visibleRows.length} satır güncellenecektir.
+             </div>` : '';
+
         // Yeni diyalog oluştur
         const dialog = document.createElement('div');
         dialog.className = 'bulk-update-dialog';
         dialog.innerHTML = `
             <h3>${columnName} Sütununu Toplu Güncelleme</h3>
+            ${dialogPrefix}
             <div id="singleValueSection">
-                <p>Tüm satırlar için yeni değer girin:</p>
+                <p>Görünür satırlar için yeni değer girin:</p>
                 <div class="o_field_widget o_field_char oe_inline" style="display: block; width: 100%;">
                     <input class="o_input" type="text" autocomplete="off" placeholder="Yeni değeri girin..." id="bulkUpdateValue">
                 </div>
@@ -286,7 +314,7 @@
         document.getElementById('bulkUpdateValue').focus();
     }
 
-    // DOM manipülasyonuyla toplu güncelleme
+    // DOM manipülasyonuyla toplu güncelleme - sadece görünür satırları günceller
     async function bulkUpdateViaDOM(columnIndex, newValue, waitTime, isMultiline) {
         const table = document.querySelector('.o_list_table');
         if (!table) {
@@ -327,7 +355,12 @@
         document.body.appendChild(progressDialog);
 
         try {
-            const rows = table.querySelectorAll('tbody tr.o_data_row');
+            // Sadece görünür satırları al
+            let allRows = Array.from(table.querySelectorAll('tbody tr.o_data_row'));
+            // Sadece görünür satırları filtrele (display: none olmayan)
+            let rows = allRows.filter(row => row.style.display !== 'none');
+            console.log(`Toplu güncelleme: ${rows.length} görünür satır bulundu (toplam ${allRows.length} satır)`);
+
             if (rows.length === 0) {
                 showNotification("Güncellenecek satır bulunamadı!", "warning");
                 progressDialog.remove();
@@ -575,5 +608,5 @@
 
     // Scriptı başlat
     initialize();
-    console.log("Odoo Toplu Güncelleme Scripti başlatıldı");
+    console.log("Odoo Toplu Güncelleme scripti başlatıldı");
 })();
