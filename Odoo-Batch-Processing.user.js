@@ -2,9 +2,9 @@
 // @name            Odoo Batch Processing
 // @name:tr         Odoo Toplu Güncelleme
 // @namespace       https://github.com/sipsak
-// @version         1.5
-// @description     It adds a batch update feature for rows in Odoo. To perform a batch update, you need to Ctrl + click on the column header you want to update.
-// @description:tr  Odoo'da satırlarda toplu güncelleme yapma özelliği ekler, toplu güncelleme yapmak istediğiniz sütun başlığına Ctrl ile birlikte tıklamanız gerekir.
+// @version         1.6
+// @description     Adds the ability to perform bulk updates on rows in Odoo; to do a bulk update, you need to Ctrl-click on the column header you want to update.
+// @description:tr  Odoo'ya satırlarda toplu güncelleme yapma özelliği ekler, toplu güncelleme yapmak istediğiniz sütun başlığına Ctrl ile birlikte tıklamanız gerekir.
 // @author          Burak Şipşak
 // @match           https://portal.bskhvac.com.tr/*
 // @match           https://*.odoo.com/*
@@ -36,6 +36,11 @@
             color: #714b67;
             border-bottom: 1px solid #eee;
             padding-bottom: 10px;
+            cursor: move;
+            user-select: none;
+        }
+        .progress-dialog h3 {
+            cursor: default; /* İlerleme dialogu başlığının sürüklenebilir görünmemesi için */
         }
         .bulk-update-buttons {
             text-align: right;
@@ -89,6 +94,9 @@
         }
         .update-scope-selector input[type="radio"] {
             margin-right: 5px;
+        }
+        .progress {
+            height: 25px;
         }
     `;
 
@@ -194,10 +202,11 @@
         const allRows = Array.from(table.querySelectorAll('tbody tr.o_data_row'));
         const visibleRows = allRows.filter(row => row.style.display !== 'none');
 
-        const dialogPrefix = visibleRows.length !== allRows.length ?
-            `<div class="update-info-text">
-                <strong>Bilgi:</strong> Tabloda ${allRows.length} satır var ve sadece görünür olan ${visibleRows.length} satır güncellenecektir.
-             </div>` : '';
+        const dialogPrefix = `<div class="update-info-text">
+            <strong>Bilgi:</strong> ${allRows.length !== visibleRows.length ?
+                `Tabloda ${allRows.length} satır var ve ${visibleRows.length} satır güncellenecektir.` :
+                `Toplam ${allRows.length} satır güncellenecektir.`}
+         </div>`;
 
         // Yeni diyalog oluştur
         const dialog = document.createElement('div');
@@ -206,19 +215,19 @@
             <h3>${columnName} Sütununu Toplu Güncelleme</h3>
             ${dialogPrefix}
             <div id="singleValueSection">
-                <p>Görünür satırlar için yeni değer girin:</p>
+                <p>Yeni değer girin:</p>
                 <div class="o_field_widget o_field_char oe_inline" style="display: block; width: 100%;">
                     <input class="o_input" type="text" autocomplete="off" placeholder="Yeni değeri girin..." id="bulkUpdateValue">
                 </div>
             </div>
             <div id="multiValueSection" style="display: none;">
-                <p>Her satıra bir veri girin:</p>
+                <p>Her satıra bir değer girin:</p>
                 <textarea class="bulk-multiline-area" id="bulkUpdateMultilineValue" placeholder="Her satıra bir değer girin..."></textarea>
             </div>
             <br>
             <p>Satırlar arası bekleme süresi (ms cinsinden):</p>
             <div class="o_field_widget o_field_char oe_inline" style="display: block; width: 100%;">
-                <input class="o_input" type="number" min="0" autocomplete="off" placeholder="Bekleme süresi girin..." id="bulkUpdateWaitTime" value="300" step="50">
+                <input class="o_input" type="number" min="0" autocomplete="off" placeholder="Bekleme süresi girin..." id="bulkUpdateWaitTime" value="400" step="100">
             </div>
             <br>
             <div class="bulk-update-buttons">
@@ -261,14 +270,22 @@
 
         // Güncelleme işlemini başlatan fonksiyon
         function proceedUpdate() {
-            const waitTimeInputValue = document.getElementById('bulkUpdateWaitTime').value;
-            if (waitTimeInputValue === "" || isNaN(parseInt(waitTimeInputValue))) {
-                showNotification("Lütfen geçerli bir bekleme süresi girin.", "warning");
+            const singleValue = document.getElementById('bulkUpdateValue').value.trim();
+            const multiValue = document.getElementById('bulkUpdateMultilineValue').value.trim();
+            const waitTime = parseInt(document.getElementById('bulkUpdateWaitTime').value);
+
+            if (singleValueSection.style.display !== 'none' && !singleValue) {
+                showNotification("Lütfen en az bir değer girin.", "warning");
                 return;
             }
-            const waitTime = parseInt(waitTimeInputValue);
-            if (waitTime < 0) {
-                showNotification("Bekleme süresi sıfırdan küçük olamaz.", "warning");
+
+            if (multiValueSection.style.display !== 'none' && !multiValue) {
+                showNotification("Lütfen en az bir değer girin.", "warning");
+                return;
+            }
+
+            if (isNaN(waitTime) || waitTime < 0) {
+                showNotification("Geçerli bir bekleme süresi girin.", "warning");
                 return;
             }
 
@@ -277,7 +294,7 @@
 
             if (isMultilineMode) {
                 // Çoklu veri modu
-                const multilineValues = document.getElementById('bulkUpdateMultilineValue').value.split('\n')
+                const multilineValues = multiValue.split('\n')
                     .filter(line => line.trim() !== ''); // Boş satırları filtrele
 
                 if (multilineValues.length === 0) {
@@ -288,7 +305,7 @@
                 bulkUpdateViaDOM(columnIndex, multilineValues, waitTime, true);
             } else {
                 // Tek değer modu
-                const newValue = document.getElementById('bulkUpdateValue').value;
+                const newValue = singleValue;
                 bulkUpdateViaDOM(columnIndex, newValue, waitTime, false);
             }
 
@@ -298,20 +315,77 @@
         // Güncelle butonu
         document.getElementById('bulkUpdateConfirm').addEventListener('click', proceedUpdate);
 
-        // Enter tuşu ile onay
-        document.getElementById('bulkUpdateValue').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                proceedUpdate();
+        // Ctrl+Enter desteği
+        document.getElementById('bulkUpdateValue').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                document.getElementById('bulkUpdateConfirm').click();
             }
         });
-        document.getElementById('bulkUpdateWaitTime').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                proceedUpdate();
+
+        document.getElementById('bulkUpdateMultilineValue').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                document.getElementById('bulkUpdateConfirm').click();
             }
         });
 
         // Input odağı
         document.getElementById('bulkUpdateValue').focus();
+
+        // Taşınabilir pencere özelliği
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
+
+        // Pencereyi sayfanın ortasına konumlandır
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const dialogWidth = dialog.offsetWidth;
+        const dialogHeight = dialog.offsetHeight;
+
+        xOffset = -(dialogWidth / 2);
+        yOffset = -(dialogHeight / 2);
+
+        dialog.style.transform = `translate(${xOffset}px, ${yOffset}px)`;
+
+        // Sadece başlıktan sürükleme
+        const dialogHeader = dialog.querySelector('h3');
+        dialogHeader.addEventListener('mousedown', dragStart);
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', dragEnd);
+
+        function dragStart(e) {
+            initialX = e.clientX - xOffset;
+            initialY = e.clientY - yOffset;
+            isDragging = true;
+        }
+
+        function drag(e) {
+            if (isDragging) {
+                e.preventDefault();
+
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+
+                xOffset = currentX;
+                yOffset = currentY;
+
+                setTranslate(currentX, currentY, dialog);
+            }
+        }
+
+        function setTranslate(xPos, yPos, el) {
+            el.style.transform = `translate(${xPos}px, ${yPos}px)`;
+        }
+
+        function dragEnd(e) {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+        }
     }
 
     // DOM manipülasyonuyla toplu güncelleme - sadece görünür satırları günceller
@@ -322,37 +396,36 @@
             return;
         }
 
+        // İptal değişkeni
+        let isCancelled = false;
+
         // İlerleme göstergesi
         const progressDialog = document.createElement('div');
-        progressDialog.className = 'd-flex flex-column gap-2 p-3';
+        progressDialog.className = 'bulk-update-dialog progress-dialog';
         progressDialog.innerHTML = `
-            <h3 class="text-center">Toplu Güncelleme İşlemi</h3>
+            <h3>Güncelleme devam ediyor...</h3>
             <div class="progress flex-grow-1 rounded-3">
-                <div class="progress-bar progress-bar-striped"
-                     role="progressbar"
-                     id="odooProgressBar"
-                     aria-valuenow="0"
-                     aria-valuemin="0"
-                     aria-valuemax="100"
-                     style="width: 0%">
+                <div class="progress-bar progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Progress bar" style="width: 0%">
                     <span class="fs-4">0%</span>
                 </div>
             </div>
-            <p id="progressStatus" class="text-center mb-0">Hücreler hazırlanıyor...</p>
-        `;
-        progressDialog.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.2);
-            min-width: 400px;
-            z-index: 10001;
+            <p id="progressStatus" class="text-center mb-0" style="margin-top: 10px;">Hücreler hazırlanıyor...</p>
+            <p class="text-center mb-0" style="margin-top: 10px; color: #714b67;">İşlem tamamlanana kadar bu sekmede kalın ve sayfaya herhangi bir müdahalede bulunmayın.</p>
+            <div class="bulk-update-buttons" style="margin-top: 15px; text-align: center;">
+                <button class="btn btn-danger" id="cancelUpdate">İptal</button>
+            </div>
         `;
         document.body.appendChild(progressDialog);
+
+        // İptal butonu için event listener
+        document.getElementById('cancelUpdate').addEventListener('click', function() {
+            isCancelled = true;
+            progressDialog.remove();
+            showNotification("Güncelleme işlemi iptal edildi.", "warning");
+        });
+
+        // Pencereyi sayfanın ortasına konumlandır
+        progressDialog.style.transform = 'translate(-50%, -50%)';
 
         try {
             // Sadece görünür satırları al
@@ -379,13 +452,22 @@
             }
 
             for (let i = 0; i < rowsToProcess; i++) {
+                // İptal kontrolü
+                if (isCancelled) {
+                    break;
+                }
+
                 const row = rows[i];
                 const cell = row.querySelectorAll('td')[columnIndex];
                 if (!cell) continue;
 
-                document.getElementById('progressStatus').textContent = `Satır güncelleniyor: ${i+1}/${rowsToProcess}`;
+                const progressStatus = document.getElementById('progressStatus');
+                if (progressStatus) {
+                    progressStatus.textContent = `Satır güncelleniyor: ${i+1}/${rowsToProcess}`;
+                }
+
                 const progress = Math.round(((i+1)/rowsToProcess) * 100);
-                const progressBar = document.getElementById('odooProgressBar');
+                const progressBar = document.querySelector('.progress-bar');
                 progressBar.style.width = `${progress}%`;
                 progressBar.setAttribute('aria-valuenow', progress);
                 progressBar.querySelector('span').textContent = `${progress}%`;
@@ -417,24 +499,46 @@
                 await sleep(waitTime);
             }
 
-            if (successCount > 0) {
-                showNotification(`${successCount} satır başarıyla güncellendi.`, "success");
+            if (isCancelled) {
+                showNotification("Güncelleme işlemi iptal edildi.", "warning");
+            } else if (successCount > 0) {
+                // Başarısız güncelleme varsa sarı, yoksa yeşil renk kullan
+                const notificationType = errorCount > 0 ? "warning" : "success";
+                const message = `Başarılı: ${successCount} | Başarısız: ${errorCount}`;
+                showNotification(message, notificationType);
             } else if (errorCount > 0) {
                 showNotification(`Güncelleme başarısız oldu. ${errorCount} hata oluştu.`, "error");
             } else {
                 showNotification("Hiçbir satır güncellenemedi.", "warning");
             }
 
-            if (successCount > 0) {
+            if (successCount > 0 && !isCancelled) {
                 setTimeout(() => {
-                    const event = new KeyboardEvent('keydown', {
-                        bubbles: true,
-                        cancelable: true,
-                        keyCode: 13,
-                        code: 'Enter',
-                        key: 'Enter'
-                    });
-                    document.body.dispatchEvent(event);
+                    // Tablonun odağından çık
+                    const table = document.querySelector('.o_list_table');
+                    if (table) {
+                        // Tablonun odağından çıkmak için sayfa dışında bir yere tıklama simülasyonu yap
+                        const clickEvent = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: 0,
+                            clientY: 0
+                        });
+                        document.body.dispatchEvent(clickEvent);
+
+                        // Alternatif olarak, tablonun dışında bir elemente odaklan
+                        const body = document.body;
+                        body.focus();
+
+                        // Tablonun tüm hücrelerinden odağı kaldır
+                        const cells = table.querySelectorAll('td, th');
+                        cells.forEach(cell => {
+                            if (document.activeElement === cell) {
+                                cell.blur();
+                            }
+                        });
+                    }
                 }, 500);
             }
 
